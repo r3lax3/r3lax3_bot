@@ -56,3 +56,9 @@ class NavigationCallback(CallbackData, prefix="nav"):
 class LanguageCallback(CallbackData, prefix="lang"):
     """Callback для смены языка"""
     language: str  # l - язык (ru/en)
+
+
+class AdminServiceCallback(CallbackData, prefix="asvc"):
+    """Callback для действий с сервисом (админ)"""
+    action: str  # start | pause | resume
+    service_id: int

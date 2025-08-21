@@ -13,7 +13,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from src.states.admin import AdminSG
 from src.i18n.translations import translations
 from src.keyboards.inline import get_admin_main_keyboard
-from src.keyboards.factories import AdminCallback, AdminExtendCallback
+from src.keyboards.factories import AdminCallback, AdminExtendCallback, AdminServiceCallback
 from src.storage.redis_helper import RedisHelper
 from src.clients.backend_api import api_client
 from src.utils.formatters import format_date
@@ -252,3 +252,50 @@ async def admin_user_search(message: Message, is_admin: bool, language: str, sta
     except Exception as e:
         logger.error(f"user search error: {e}")
         await message.answer(translations.get("error.service_unavailable", language))
+
+
+@router.message(Command("admin_service"))
+async def admin_service_cmd(message: Message, is_admin: bool, language: str):
+    """Команда: /admin_service <service_id> — показать инфо и действия"""
+    if not is_admin:
+        return
+    try:
+        parts = message.text.strip().split()
+        if len(parts) < 2:
+            await message.answer("/admin_service <service_id>")
+            return
+        service_id = int(parts[1])
+        svc = await api_client.get_service(service_id)
+        text = f"Service #{service_id}: {svc.get('name')} status: {svc.get('status')}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Start", callback_data=AdminServiceCallback(action="start", service_id=service_id).pack())],
+            [InlineKeyboardButton(text="Pause", callback_data=AdminServiceCallback(action="pause", service_id=service_id).pack())],
+            [InlineKeyboardButton(text="Resume", callback_data=AdminServiceCallback(action="resume", service_id=service_id).pack())],
+        ])
+        await message.answer(text, reply_markup=kb)
+    except Exception as e:
+        logger.error(f"admin service cmd error: {e}")
+        await message.answer(translations.get("error.service_unavailable", language))
+
+
+@router.callback_query()
+async def admin_service_actions(callback: CallbackQuery, is_admin: bool, language: str):
+    if not is_admin:
+        return
+    try:
+        data = AdminServiceCallback.unpack(callback.data)
+    except Exception:
+        return
+    try:
+        if data.action == "start":
+            await api_client.start_service(data.service_id)
+            await callback.answer("Started")
+        elif data.action == "pause":
+            await api_client.pause_service(data.service_id)
+            await callback.answer("Paused")
+        elif data.action == "resume":
+            await api_client.resume_service(data.service_id)
+            await callback.answer("Resumed")
+    except Exception as e:
+        logger.error(f"admin service action error: {e}")
+        await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
