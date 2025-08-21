@@ -46,8 +46,11 @@ async def main():
     dp.callback_query.middleware(RateLimitMiddleware(redis_helper))
     
     # Регистрация роутеров
-    from src.routers import user
+    from src.routers import user, subscriptions, payments, history
     dp.include_router(user.router)
+    dp.include_router(subscriptions.router)
+    dp.include_router(payments.router)
+    dp.include_router(history.router)
     
     # TODO: Добавить остальные роутеры
     # from src.routers import admin, subscriptions, payments, history

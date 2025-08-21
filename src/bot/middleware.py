@@ -52,6 +52,8 @@ class LanguageMiddleware(BaseMiddleware):
             # Проверяем, является ли пользователь админом
             is_admin = tg_id in config.admin_user_ids
             data["is_admin"] = is_admin
+            # Прокидываем redis_helper в хендлеры
+            data["redis_helper"] = self.redis_helper
         
         return await handler(event, data)
 

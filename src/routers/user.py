@@ -249,7 +249,7 @@ async def handle_admin_panel(message: Message, state: FSMContext, language: str,
 
 # Обработка callback для смены языка
 @router.callback_query(StateFilter(UserSG.STATE_LANGUAGE_SELECT))
-async def handle_language_callback(callback: CallbackQuery, state: FSMContext, language: str):
+async def handle_language_callback(callback: CallbackQuery, state: FSMContext, language: str, redis_helper: RedisHelper):
     """Обработка выбора языка"""
     try:
         from src.keyboards.factories import LanguageCallback
@@ -261,9 +261,7 @@ async def handle_language_callback(callback: CallbackQuery, state: FSMContext, l
         # Обновляем язык в API
         await api_client.update_user_language(callback.from_user.id, new_language)
         
-        # Обновляем язык в кеше Redis
-        from src.storage.redis_helper import RedisHelper
-        redis_helper = RedisHelper(callback.bot.session.redis)
+        # Обновляем язык в кеше Redis (через внедренный redis_helper)
         await redis_helper.set_user_language(callback.from_user.id, new_language)
         
         # Отправляем подтверждение
