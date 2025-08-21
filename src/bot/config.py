@@ -39,6 +39,9 @@ class BotConfig(BaseSettings):
     use_long_polling: bool = Field(True, env="USE_LONG_POLLING")
     idempotency_enabled: bool = Field(True, env="IDEMPOTENCY_ENABLED")
     
+    # Internal webhook path
+    internal_webhook_path: str = Field("/internal/payments/notify", env="INTERNAL_WEBHOOK_PATH")
+    
     # Offers Directory
     offers_dir: str = Field("assets/offers", env="OFFERS_DIR")
     

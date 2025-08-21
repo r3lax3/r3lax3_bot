@@ -2,6 +2,7 @@
 Основной файл бота
 """
 import asyncio
+import contextlib
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
@@ -59,6 +60,10 @@ async def main():
     # dp.include_router(payments.router)
     # dp.include_router(history.router)
     
+    # Внутренний HTTP-сервер для уведомлений запускаем в фоне
+    from src.bot.internal_server import start_internal_server
+    internal_task = asyncio.create_task(start_internal_server(bot, redis_helper))
+
     # Обработчик ошибок
     @dp.errors()
     async def errors_handler(update, exception):
@@ -81,6 +86,10 @@ async def main():
     finally:
         await bot.session.close()
         await redis.close()
+        # Останавливаем внутренний сервер
+        internal_task.cancel()
+        with contextlib.suppress(Exception):
+            await internal_task
 
 
 if __name__ == "__main__":
