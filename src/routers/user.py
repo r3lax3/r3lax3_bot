@@ -163,26 +163,24 @@ async def handle_payment_history(message: Message, state: FSMContext, language: 
         await message.answer(error_message)
 
 
-@router.message(StateFilter(UserSG.STATE_IDLE), F.text == "Смена языка")
-@router.message(StateFilter(UserSG.STATE_IDLE), F.text == "Language")
-async def handle_language_change(message: Message, state: FSMContext, language: str):
-    """Обработка кнопки 'Смена языка'"""
+@router.message(Command("lang"))
+@router.message(StateFilter(UserSG.STATE_IDLE), F.text.in_({"Смена языка", "Language"}))
+async def handle_language_toggle(message: Message, state: FSMContext, language: str, redis_helper: RedisHelper):
+    """Мгновенное переключение RU/EN"""
     try:
-        # Создаем inline клавиатуру для выбора языка
-        keyboard = get_language_select_keyboard(language)
-        
-        await message.answer(
-            "Выберите язык / Choose language:",
-            reply_markup=keyboard
+        new_language = "en" if language == "ru" else "ru"
+        await api_client.update_user_language(message.from_user.id, new_language)
+        await redis_helper.set_user_language(message.from_user.id, new_language)
+        confirmation_text = translations.get(
+            f"language.switched.{new_language}", new_language
         )
-        
-        # Устанавливаем состояние выбора языка
-        await state.set_state(UserSG.STATE_LANGUAGE_SELECT)
-        
+        await message.answer(confirmation_text, reply_markup=(
+            get_admin_main_keyboard(new_language) if message.from_user.id in [] else get_main_keyboard(new_language)
+        ))
+        await state.set_state(UserSG.STATE_IDLE)
     except Exception as e:
-        logger.error(f"Error in language change: {e}")
-        error_message = translations.get("error.service_unavailable", language)
-        await message.answer(error_message)
+        logger.error(f"Error toggling language: {e}")
+        await message.answer(translations.get("error.service_unavailable", language))
 
 
 @router.message(StateFilter(UserSG.STATE_IDLE), F.text == "Техподдержка")
