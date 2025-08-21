@@ -148,6 +148,10 @@ class BackendAPIClient:
     async def get_admin_user(self, tg_id: int) -> Dict[str, Any]:
         """Получить пользователя для админа"""
         return await self._make_request("GET", f"/admin/users/{tg_id}")
+
+    async def get_admin_stats(self) -> Dict[str, Any]:
+        """Получить базовую статистику для админа"""
+        return await self._make_request("GET", "/admin/stats")
     
     async def extend_subscription(self, subscription_id: int, plan: str) -> None:
         """Продлить подписку (админ)"""

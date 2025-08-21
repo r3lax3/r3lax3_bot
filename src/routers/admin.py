@@ -15,6 +15,7 @@ from src.keyboards.inline import get_admin_main_keyboard
 from src.keyboards.factories import AdminCallback
 from src.storage.redis_helper import RedisHelper
 from src.clients.backend_api import api_client
+from src.utils.formatters import format_date
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -43,9 +44,12 @@ async def admin_main_actions(callback: CallbackQuery, is_admin: bool, language: 
             await callback.message.edit_text(translations.get("admin.users.search", language))
             await callback.answer()
         elif data.action == "stats":
-            # Заглушка: простая статистика
-            stats = {"total": 0, "active": 0}
-            text = translations.get("admin.stats.title", language) + f"\n{translations.get('admin.stats.users_total', language, total=stats['total'])}"
+            stats = await api_client.get_admin_stats()
+            text = translations.get("admin.stats.title", language)
+            text += "\n" + translations.get("admin.stats.users_total", language, total=stats.get("users_total", 0))
+            text += "\n" + translations.get("admin.stats.users_active", language, active=stats.get("users_active", 0))
+            text += "\n" + translations.get("admin.stats.subscriptions_active", language, active=stats.get("subs_active", 0))
+            text += "\n" + translations.get("admin.stats.monthly_revenue", language, amount=stats.get("mrr_amount", 0), currency=stats.get("currency", "USD"))
             await callback.message.edit_text(text, reply_markup=get_admin_main_keyboard(language))
             await callback.answer()
         else:
@@ -136,9 +140,12 @@ async def admin_user_search(message: Message, is_admin: bool, language: str):
         if not users:
             await message.answer(translations.get("admin.users.not_found", language))
             return
-        # Покажем первые 5
-        text = "\n".join([str(u) for u in users[:5]])
-        await message.answer(text)
+        # Покажем первые 5 (tg_id, username, name)
+        lines = []
+        for u in users[:5]:
+            line = f"tg_id={u.get('tg_id')} @" + str(u.get('username', '')) + " " + str(u.get('name', ''))
+            lines.append(line)
+        await message.answer("\n".join(lines))
     except Exception as e:
         logger.error(f"user search error: {e}")
         await message.answer(translations.get("error.service_unavailable", language))
