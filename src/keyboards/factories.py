@@ -40,6 +40,13 @@ class AdminCallback(CallbackData, prefix="admin"):
     page: int = 1  # p - страница
 
 
+class AdminExtendCallback(CallbackData, prefix="aex"):
+    """Callback для продления подписки (админ)"""
+    action: str  # select_plan | confirm | cancel
+    subscription_id: int
+    plan: str = ""
+
+
 class NavigationCallback(CallbackData, prefix="nav"):
     """Callback для навигации"""
     action: str  # t - тип действия

@@ -12,13 +12,34 @@ from aiogram.types import Message, CallbackQuery
 from src.states.admin import AdminSG
 from src.i18n.translations import translations
 from src.keyboards.inline import get_admin_main_keyboard
-from src.keyboards.factories import AdminCallback
+from src.keyboards.factories import AdminCallback, AdminExtendCallback
 from src.storage.redis_helper import RedisHelper
 from src.clients.backend_api import api_client
 from src.utils.formatters import format_date
 
 logger = logging.getLogger(__name__)
 router = Router()
+@router.message(Command("admin_user"))
+async def admin_user_profile_cmd(message: Message, is_admin: bool, language: str):
+    if not is_admin:
+        return
+    try:
+        parts = message.text.strip().split()
+        if len(parts) < 2:
+            await message.answer("/admin_user <tg_id>")
+            return
+        tg_id = int(parts[1])
+        profile = await api_client.get_admin_user(tg_id)
+        subs = profile.get("subscriptions", [])
+        payments = profile.get("payments", [])
+        text = translations.get("admin.users.profile", language, tg_id=tg_id, language=profile.get("language", "-"), subscriptions_count=len(subs))
+        # Упростим вывод подписок
+        for s in subs[:5]:
+            text += f"\n - sub#{s.get('id')} {s.get('service_name')} until: {format_date(s.get('until_date'), language) if s.get('until_date') else '-'}"
+        await message.answer(text)
+    except Exception as e:
+        logger.error(f"admin user profile error: {e}")
+        await message.answer(translations.get("error.service_unavailable", language))
 
 
 @router.message(Command("admin"))
@@ -132,7 +153,7 @@ async def admin_broadcast_confirm(message: Message, state: FSMContext, is_admin:
 
 # Users search
 @router.message(StateFilter(AdminSG.STATE_ADMIN_USER_SEARCH))
-async def admin_user_search(message: Message, is_admin: bool, language: str):
+async def admin_user_search(message: Message, is_admin: bool, language: str, state: FSMContext):
     if not is_admin:
         return
     try:
@@ -140,8 +161,8 @@ async def admin_user_search(message: Message, is_admin: bool, language: str):
         if not users:
             await message.answer(translations.get("admin.users.not_found", language))
             return
-        # Покажем первые 5 (tg_id, username, name)
-        lines = []
+        # Покажем первые 5 (tg_id, username, name). Подсказка открыть профиль: /admin_user <tg_id>
+        lines = ["Use: /admin_user <tg_id>\n"]
         for u in users[:5]:
             line = f"tg_id={u.get('tg_id')} @" + str(u.get('username', '')) + " " + str(u.get('name', ''))
             lines.append(line)
