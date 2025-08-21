@@ -8,6 +8,7 @@ from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.states.admin import AdminSG
 from src.i18n.translations import translations
@@ -39,6 +40,87 @@ async def admin_user_profile_cmd(message: Message, is_admin: bool, language: str
         await message.answer(text)
     except Exception as e:
         logger.error(f"admin user profile error: {e}")
+        await message.answer(translations.get("error.service_unavailable", language))
+
+
+@router.message(Command("admin_extend"))
+async def admin_extend_cmd(message: Message, is_admin: bool, language: str):
+    """Команда: /admin_extend <subscription_id> — выбрать план и подтвердить"""
+    if not is_admin:
+        return
+    try:
+        parts = message.text.strip().split()
+        if len(parts) < 2:
+            await message.answer("/admin_extend <subscription_id>")
+            return
+        subscription_id = int(parts[1])
+        sub = await api_client.get_subscription(subscription_id)
+        service_id = sub.get("service_id")
+        options = await api_client.get_service_payment_options(service_id)
+        plans = options.get("plans", [])
+        # Клавиатура выбора плана
+        rows = []
+        for plan in plans:
+            code = plan.get("code")
+            amount = plan.get("amount")
+            currency = plan.get("currency")
+            rows.append([InlineKeyboardButton(text=f"{code} {amount} {currency}", callback_data=AdminExtendCallback(action="select_plan", subscription_id=subscription_id, plan=code).pack())])
+        kb = InlineKeyboardMarkup(inline_keyboard=rows)
+        await message.answer("Select plan:" if language == "en" else "Выберите план:", reply_markup=kb)
+    except Exception as e:
+        logger.error(f"admin extend cmd error: {e}")
+        await message.answer(translations.get("error.service_unavailable", language))
+
+
+@router.callback_query()
+async def admin_extend_callbacks(callback: CallbackQuery, is_admin: bool, language: str):
+    """Обработка цепочки aex: select_plan -> confirm -> apply/cancel"""
+    if not is_admin:
+        return
+    # Пытаемся распарсить как AdminExtendCallback
+    try:
+        data = AdminExtendCallback.unpack(callback.data)
+    except Exception:
+        return
+    try:
+        if data.action == "select_plan":
+            # Показать подтверждение
+            text = ("Extend subscription" if language == "en" else "Подтвердите продление") + f" #{data.subscription_id} plan {data.plan}?"
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=("Yes" if language == "en" else "Да"), callback_data=AdminExtendCallback(action="confirm", subscription_id=data.subscription_id, plan=data.plan).pack())],
+                [InlineKeyboardButton(text=("No" if language == "en" else "Нет"), callback_data=AdminExtendCallback(action="cancel", subscription_id=data.subscription_id, plan=data.plan).pack())]
+            ])
+            await callback.message.edit_text(text, reply_markup=kb)
+            await callback.answer()
+        elif data.action == "confirm":
+            await api_client.extend_subscription(data.subscription_id, data.plan)
+            await callback.message.edit_text("Extended" if language == "en" else "Продлено")
+            await callback.answer()
+        elif data.action == "cancel":
+            await callback.message.edit_text("Canceled" if language == "en" else "Отменено")
+            await callback.answer()
+    except Exception as e:
+        logger.error(f"admin extend cb error: {e}")
+        await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
+
+
+@router.message(Command("admin_create_sub"))
+async def admin_create_subscription_cmd(message: Message, is_admin: bool, language: str):
+    """Команда: /admin_create_sub <tg_id> <service_id> <plan> — создать/изменить подписку"""
+    if not is_admin:
+        return
+    try:
+        parts = message.text.strip().split()
+        if len(parts) < 4:
+            await message.answer("/admin_create_sub <tg_id> <service_id> <plan>")
+            return
+        tg_id = int(parts[1])
+        service_id = int(parts[2])
+        plan = parts[3]
+        await api_client.create_subscription(tg_id=tg_id, service_id=service_id, plan=plan)
+        await message.answer("Done" if language == "en" else "Готово")
+    except Exception as e:
+        logger.error(f"admin create sub error: {e}")
         await message.answer(translations.get("error.service_unavailable", language))
 
 
