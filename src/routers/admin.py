@@ -17,6 +17,7 @@ from src.keyboards.factories import AdminCallback, AdminExtendCallback, AdminSer
 from src.storage.redis_helper import RedisHelper
 from src.clients.backend_api import api_client
 from src.utils.formatters import format_date
+from src.utils.validation import validate_broadcast_segment
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -178,10 +179,14 @@ async def admin_broadcast_segment(message: Message, state: FSMContext, is_admin:
     if not is_admin:
         return
     seg = message.text.strip()
+    ok, norm = validate_broadcast_segment(seg)
+    if not ok:
+        await message.answer(norm)
+        return
     draft = await redis_helper.get_broadcast_draft(message.from_user.id) or {}
-    await redis_helper.set_broadcast_draft(message.from_user.id, draft.get("text", ""), segment=seg)
+    await redis_helper.set_broadcast_draft(message.from_user.id, draft.get("text", ""), segment=norm)
     await state.set_state(AdminSG.STATE_ADMIN_BROADCAST_PREVIEW)
-    preview = translations.get("admin.broadcast.preview", language, text=draft.get("text", ""), segment=seg)
+    preview = translations.get("admin.broadcast.preview", language, text=draft.get("text", ""), segment=norm)
     await message.answer(preview + "\n\n" + ("Yes/No" if language == "en" else "Да/Нет"))
 
 

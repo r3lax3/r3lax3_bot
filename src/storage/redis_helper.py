@@ -160,3 +160,45 @@ class RedisHelper:
         keys = await self.redis.keys(pattern)
         if keys:
             await self.redis.delete(*keys)
+
+    # Навигационный стек
+    async def push_screen(self, tg_id: int, screen: dict) -> None:
+        key = f"{self.prefix}navstack:{tg_id}"
+        # Храним JSON-массив
+        current = await self.redis.get(key)
+        stack = []
+        if current:
+            try:
+                stack = json.loads(current)
+            except Exception:
+                stack = []
+        stack.append(screen)
+        await self.redis.set(key, json.dumps(stack))
+
+    async def pop_screen(self, tg_id: int) -> dict | None:
+        key = f"{self.prefix}navstack:{tg_id}"
+        current = await self.redis.get(key)
+        if not current:
+            return None
+        try:
+            stack = json.loads(current)
+        except Exception:
+            return None
+        if not stack:
+            return None
+        screen = stack.pop()
+        await self.redis.set(key, json.dumps(stack))
+        return screen
+
+    async def peek_screen(self, tg_id: int) -> dict | None:
+        key = f"{self.prefix}navstack:{tg_id}"
+        current = await self.redis.get(key)
+        if not current:
+            return None
+        try:
+            stack = json.loads(current)
+        except Exception:
+            return None
+        if not stack:
+            return None
+        return stack[-1]
