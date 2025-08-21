@@ -1,0 +1,19 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  bot:
+    build: .
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      - FSM_STORAGE_URL=redis://redis:6379
+    ports:
+      - "8080:8080"  # проброс внутреннего HTTP сервера
+    restart: always

@@ -90,3 +90,68 @@ src/
 ├── storage/       # Redis helpers
 └── utils/         # Утилиты
 ```
+
+## Деплой
+
+### Вариант 1: Docker Compose (рекомендуется)
+
+1) Заполните `.env` (см. `env.example`).
+2) Соберите и запустите:
+
+```bash
+docker compose up -d --build
+```
+
+Состав:
+- `redis`: хранилище FSM
+- `bot`: сам бот (long polling) и встроенный HTTP‑сервер для внутренних уведомлений
+
+Порты:
+- Внутренний сервер слушает `INTERNAL_SERVER_HOST:INTERNAL_SERVER_PORT` (см. .env). При необходимости пробросьте порт на хост.
+
+Логи:
+```bash
+docker compose logs -f bot
+```
+
+### Вариант 2: Bare metal (systemd)
+
+Требования: Python 3.11+, Redis. Установите зависимости и запустите как сервис.
+
+1) Установка зависимостей:
+```bash
+python -m venv .venv
+. .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt
+```
+
+2) Настройте `.env`.
+
+3) Юнит‑запуск:
+```bash
+python -m src.bot.main
+```
+
+4) Пример unit-файла systemd `/etc/systemd/system/r3lax3-bot.service`:
+```
+[Unit]
+Description=R3lax3 Frontend Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/r3lax3_bot
+EnvironmentFile=/opt/r3lax3_bot/.env
+ExecStart=/opt/r3lax3_bot/.venv/bin/python -m src.bot.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now r3lax3-bot
+sudo journalctl -u r3lax3-bot -f
+```
