@@ -38,23 +38,28 @@ class BackendAPIClient:
         
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                response = await client.request(
-                    method=method,
-                    url=url,
-                    json=data,
-                    params=params,
-                    headers=headers
-                )
-                
-                # Обработка ошибок
-                if response.status_code == 429:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after:
-                        await asyncio.sleep(int(retry_after))
-                    else:
-                        await asyncio.sleep(0.5)
-                    # Повторяем запрос (максимум 2 раза)
-                    return await self._make_request(method, endpoint, data, params, idempotency_key)
+                # Простая политика ретраев для GET: до 2 повторов
+                attempts = 0
+                backoffs = [0.2, 0.6]
+                while True:
+                    response = await client.request(
+                        method=method,
+                        url=url,
+                        json=data,
+                        params=params,
+                        headers=headers
+                    )
+                    if response.status_code == 429 and method.upper() == "GET":
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after is not None:
+                            await asyncio.sleep(float(retry_after))
+                        elif attempts < len(backoffs):
+                            await asyncio.sleep(backoffs[attempts])
+                        else:
+                            break
+                        attempts += 1
+                        continue
+                    break
                 
                 response.raise_for_status()
                 
