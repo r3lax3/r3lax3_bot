@@ -73,12 +73,7 @@ async def _handle_payment_notify(request: web.Request) -> web.Response:
 		bot: Bot = request.app["bot"]
 		context = await redis_helper.get_payment_context(payment_id)
 		if not context:
-			# Контекста нет — показываем пользователю лаконичное сообщение по платежу, если сможем запросить
-			try:
-				payment = await api_client.get_payment(payment_id)
-				# Без tg_id не можем отправить — пропускаем
-			except Exception:
-				return web.Response(status=202, text="no-context")
+			# Нет сохранённого контекста — ничего не делаем
 			return web.Response(status=202, text="no-context")
 		tg_id = int(context["tg_id"])
 		subscription_id = int(context["subscription_id"]) if context.get("subscription_id") else None
@@ -153,7 +148,7 @@ def _build_app(bot: Bot, redis_helper: RedisHelper) -> web.Application:
 	app["redis_helper"] = redis_helper
 	app["default_language"] = config.default_language
 	# Роуты
-	app.router.add_post(config.internal_webhook_path if hasattr(config, "internal_webhook_path") else "/internal/payments/notify", _handle_payment_notify)
+	app.router.add_post(config.internal_webhook_path, _handle_payment_notify)
 	app.router.add_post("/internal/notifications/renew", _handle_notification_renew)
 	return app
 

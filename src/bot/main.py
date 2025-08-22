@@ -4,6 +4,7 @@
 import asyncio
 import contextlib
 import logging
+
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.enums import ParseMode
@@ -46,29 +47,15 @@ async def main():
     dp.message.middleware(RateLimitMiddleware(redis_helper))
     dp.callback_query.middleware(RateLimitMiddleware(redis_helper))
     
-    # Регистрация роутеров
-    from src.routers import user, subscriptions, payments, history, admin
-    dp.include_router(user.router)
-    dp.include_router(subscriptions.router)
-    dp.include_router(payments.router)
-    dp.include_router(history.router)
-    dp.include_router(admin.router)
-    
-    # TODO: Добавить остальные роутеры
-    # from src.routers import admin, subscriptions, payments, history
-    # dp.include_router(admin.router)
-    # dp.include_router(subscriptions.router)
-    # dp.include_router(payments.router)
-    # dp.include_router(history.router)
+    # Регистрация роутеров (агрегированный роутер)
+    from src.routers import router as app_router
+    dp.include_router(app_router)
     
     # Внутренний HTTP-сервер для уведомлений запускаем в фоне
     from src.bot.internal_server import start_internal_server
     internal_task = asyncio.create_task(start_internal_server(bot, redis_helper))
 
-    # Обработчик ошибок
-    @dp.errors()
-    async def errors_handler(update, exception):
-        logger.error(f"Exception while handling {update}: {exception}")
+    # Обработчик ошибок централизован в ErrorHandlingMiddleware
     
     try:
         logger.info("Bot started successfully")
@@ -87,6 +74,9 @@ async def main():
     finally:
         await bot.session.close()
         await redis.close()
+        # Закрываем HTTP-клиент backend_api
+        with contextlib.suppress(Exception):
+            await api_client.aclose()
         # Останавливаем внутренний сервер
         internal_task.cancel()
         with contextlib.suppress(Exception):

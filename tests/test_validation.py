@@ -18,3 +18,4 @@ def test_clamp_page():
     assert clamp_page(0, 5) == 1
     assert clamp_page(6, 5) == 5
     assert clamp_page(3, 5) == 3
+

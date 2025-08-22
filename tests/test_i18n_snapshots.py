@@ -20,3 +20,4 @@ def test_i18n_placeholders_substitution():
     en = translations.get("payment.success.title", "en", until_date="2025-01-01")
     assert "2025-01-01" in ru
     assert "2025-01-01" in en
+

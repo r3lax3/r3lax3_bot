@@ -28,7 +28,7 @@ def get_main_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
     )
 
 
-def get_admin_main_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
+def get_admin_main_reply_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
     """Главная клавиатура для админа"""
     keyboard = [
         [

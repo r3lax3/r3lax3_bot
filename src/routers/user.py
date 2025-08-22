@@ -6,10 +6,9 @@ from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.state import State
 
 from src.states.user import UserSG
-from src.keyboards.reply import get_main_keyboard, get_admin_main_keyboard
+from src.keyboards.reply import get_main_keyboard, get_admin_main_reply_keyboard
 from src.keyboards.inline import get_language_select_keyboard
 from src.clients.backend_api import api_client
 from src.storage.redis_helper import RedisHelper
@@ -30,7 +29,7 @@ async def cmd_start(message: Message, state: FSMContext, language: str, is_admin
         
         # Определяем клавиатуру
         if is_admin:
-            keyboard = get_admin_main_keyboard(language)
+            keyboard = get_admin_main_reply_keyboard(language)
         else:
             keyboard = get_main_keyboard(language)
         
@@ -66,7 +65,7 @@ async def cmd_menu(message: Message, state: FSMContext, language: str, is_admin:
     try:
         # Определяем клавиатуру
         if is_admin:
-            keyboard = get_admin_main_keyboard(language)
+            keyboard = get_admin_main_reply_keyboard(language)
         else:
             keyboard = get_main_keyboard(language)
         
@@ -165,7 +164,7 @@ async def handle_payment_history(message: Message, state: FSMContext, language: 
 
 @router.message(Command("lang"))
 @router.message(StateFilter(UserSG.STATE_IDLE), F.text.in_({"Смена языка", "Language"}))
-async def handle_language_toggle(message: Message, state: FSMContext, language: str, redis_helper: RedisHelper):
+async def handle_language_toggle(message: Message, state: FSMContext, language: str, redis_helper: RedisHelper, is_admin: bool):
     """Мгновенное переключение RU/EN"""
     try:
         new_language = "en" if language == "ru" else "ru"
@@ -175,7 +174,7 @@ async def handle_language_toggle(message: Message, state: FSMContext, language: 
             f"language.switched.{new_language}", new_language
         )
         await message.answer(confirmation_text, reply_markup=(
-            get_admin_main_keyboard(new_language) if message.from_user.id in [] else get_main_keyboard(new_language)
+            get_admin_main_reply_keyboard(new_language) if is_admin else get_main_keyboard(new_language)
         ))
         await state.set_state(UserSG.STATE_IDLE)
     except Exception as e:
@@ -245,16 +244,15 @@ async def handle_admin_panel(message: Message, state: FSMContext, language: str,
         await message.answer(error_message)
 
 
-# Обработка callback для смены языка
-@router.callback_query(StateFilter(UserSG.STATE_LANGUAGE_SELECT))
-async def handle_language_callback(callback: CallbackQuery, state: FSMContext, language: str, redis_helper: RedisHelper):
+# Обработка callback для смены языка с MagicFilter
+from src.keyboards.factories import LanguageCallback
+
+
+@router.callback_query(StateFilter(UserSG.STATE_LANGUAGE_SELECT), LanguageCallback.filter())
+async def handle_language_callback(callback: CallbackQuery, state: FSMContext, language: str, redis_helper: RedisHelper, callback_data: LanguageCallback):
     """Обработка выбора языка"""
     try:
-        from src.keyboards.factories import LanguageCallback
-        
-        # Парсим callback данные
-        data = LanguageCallback.unpack(callback.data)
-        new_language = data.language
+        new_language = callback_data.language
         
         # Обновляем язык в API
         await api_client.update_user_language(callback.from_user.id, new_language)

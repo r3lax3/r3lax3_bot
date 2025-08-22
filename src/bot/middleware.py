@@ -114,7 +114,7 @@ class RateLimitMiddleware(BaseMiddleware):
             
             if current_count and int(current_count) > 10:  # Максимум 10 запросов в минуту
                 language = data.get("language", "ru")
-                error_message = translations.get("error.service_unavailable", language)
+                error_message = translations.get("error.too_many_requests", language)
                 
                 if isinstance(event, Message):
                     await event.answer(error_message)

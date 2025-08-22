@@ -2,7 +2,7 @@
 Роутер истории платежей: пагинация списка и деталь платежа
 """
 import logging
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
@@ -18,16 +18,11 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(StateFilter(UserSG.STATE_PAYMENTS_HISTORY))
-async def payments_history_pagination(callback: CallbackQuery, state: FSMContext, language: str):
+@router.callback_query(StateFilter(UserSG.STATE_PAYMENTS_HISTORY), PaymentHistoryCallback.filter())
+async def payments_history_pagination(callback: CallbackQuery, state: FSMContext, language: str, callback_data: PaymentHistoryCallback):
     """Пагинация списка истории платежей"""
     try:
-        # Если это не наш callback — выходим
-        try:
-            data = PaymentHistoryCallback.unpack(callback.data)
-        except Exception:
-            return
-        page = max(1, data.page or 1)
+        page = max(1, callback_data.page or 1)
         payments_data = await api_client.get_user_payments(callback.from_user.id, page=page)
         items = payments_data.get("items", [])
         pages = payments_data.get("pages", 1)
@@ -43,16 +38,12 @@ async def payments_history_pagination(callback: CallbackQuery, state: FSMContext
         await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
 
 
-@router.callback_query(StateFilter(UserSG.STATE_PAYMENTS_HISTORY))
-@router.callback_query(StateFilter(UserSG.STATE_IDLE))
-async def payment_detail(callback: CallbackQuery, state: FSMContext, language: str):
+@router.callback_query(StateFilter(UserSG.STATE_PAYMENTS_HISTORY), PaymentDetailCallback.filter())
+@router.callback_query(StateFilter(UserSG.STATE_IDLE), PaymentDetailCallback.filter())
+async def payment_detail(callback: CallbackQuery, state: FSMContext, language: str, callback_data: PaymentDetailCallback):
     """Показать деталь платежа"""
     try:
-        try:
-            data = PaymentDetailCallback.unpack(callback.data)
-        except Exception:
-            return
-        payment_id = data.id
+        payment_id = callback_data.payment_id
         payment = await api_client.get_payment(payment_id)
         text = format_payment_description(
             payment_id=payment.get("id"),

@@ -26,3 +26,4 @@ def clamp_page(page: int, pages: int) -> int:
     if page > pages:
         return pages
     return page
+

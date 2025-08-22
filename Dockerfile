@@ -15,3 +15,4 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "src.bot.main"]
+

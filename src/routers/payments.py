@@ -4,7 +4,7 @@
 import logging
 import uuid
 from typing import Optional
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
@@ -21,6 +21,7 @@ from src.keyboards.factories import PaymentCallback, RenewCallback, Subscription
 from src.clients.backend_api import api_client
 from src.storage.redis_helper import RedisHelper
 from src.utils.formatters import calculate_minutes_until_expiry, format_date
+from src.bot.config import config
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -40,20 +41,35 @@ async def _show_payment_waiting(
     await callback.message.edit_text(text, reply_markup=keyboard)
 
 
-@router.callback_query(StateFilter(UserSG.STATE_PAYMENT_METHOD_SELECT))
+@router.callback_query(StateFilter(UserSG.STATE_PAYMENT_METHOD_SELECT), PaymentCallback.filter(F.action == "select"))
+@router.callback_query(StateFilter(UserSG.STATE_PAYMENT_PENDING), PaymentCallback.filter(F.action == "change_method"))
 async def handle_payment_select(
     callback: CallbackQuery,
     state: FSMContext,
     language: str,
     redis_helper: RedisHelper,
+    callback_data: PaymentCallback,
 ):
     """Пользователь выбрал провайдера и план -> создаём платёж"""
     try:
-        data = PaymentCallback.unpack(callback.data)
-        if data.action != "select":
+        # Два режима:
+        # 1) select: payment_id содержит "<subscription_id>:<provider>:<plan>"
+        # 2) change_method: payment_id содержит "<subscription_id>"
+        if callback_data.action == "change_method":
+            subscription_id = int(callback_data.payment_id)
+            subscription = await api_client.get_subscription(subscription_id)
+            service_id = subscription.get("service_id")
+            options = await api_client.get_service_payment_options(service_id)
+            providers = options.get("providers", [])
+            plans = options.get("plans", [])
+            text = translations.get("payment.method_select.title", language)
+            keyboard = get_payment_method_select_keyboard(providers, plans, subscription_id, language)
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await state.set_state(UserSG.STATE_PAYMENT_METHOD_SELECT)
+            await callback.answer()
             return
-        # payment_id в этом действии содержит "<subscription_id>:<provider>:<plan>"
-        parts = (data.payment_id or "").split(":")
+
+        parts = (callback_data.payment_id or "").split(":")
         if len(parts) != 3:
             await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
             return
@@ -104,18 +120,18 @@ async def handle_payment_select(
         await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
 
 
-@router.callback_query(StateFilter(UserSG.STATE_PAYMENT_PENDING))
+@router.callback_query(StateFilter(UserSG.STATE_PAYMENT_PENDING), PaymentCallback.filter(F.action.in_({"check", "cancel", "terms"})))
 async def handle_payment_actions(
     callback: CallbackQuery,
     state: FSMContext,
     language: str,
     redis_helper: RedisHelper,
+    callback_data: PaymentCallback,
 ):
     """Обработка кнопок: Проверить статус / Отмена / Открыть счёт (url)"""
     try:
-        data = PaymentCallback.unpack(callback.data)
-        action = data.action
-        payment_id = data.payment_id
+        action = callback_data.action
+        payment_id = callback_data.payment_id
 
         if action == "check":
             # Получаем статус платежа
@@ -173,8 +189,19 @@ async def handle_payment_actions(
             subscription_id = context.get("subscription_id") if context else None
             await redis_helper.clear_payment_context(payment_id)
             if subscription_id:
+                # Показать карточку подписки
+                try:
+                    subscription = await api_client.get_subscription(subscription_id)
+                    service_name = subscription.get("service_name", "")
+                    until_date = subscription.get("until_date")
+                    if until_date:
+                        until_text = format_date(until_date, language)
+                        text = translations.get("subscriptions.detail.title", language, service_name=service_name, until_date=until_text)
+                    else:
+                        text = translations.get("subscriptions.detail.expired", language, service_name=service_name)
+                except Exception:
+                    text = translations.get("menu.main.title", language)
                 keyboard = get_subscription_detail_keyboard(subscription_id, language)
-                text = translations.get("subscriptions.detail.back", language)
                 await callback.message.edit_text(text, reply_markup=keyboard)
                 await state.set_state(UserSG.STATE_SUBSCRIPTION_DETAIL)
             await callback.answer()
@@ -190,7 +217,8 @@ async def handle_payment_actions(
                 return
             subscription = await api_client.get_subscription(subscription_id)
             service_id = subscription.get("service_id")
-            file_path = f"assets/offers/service_{service_id}.pdf"
+            base_dir = config.offers_dir.rstrip('/')
+            file_path = f"{base_dir}/service_{service_id}.pdf"
             try:
                 doc = FSInputFile(file_path)
                 await callback.message.answer_document(document=doc, caption=translations.get("offers.pdf.title", language))

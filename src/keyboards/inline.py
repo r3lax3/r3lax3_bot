@@ -9,6 +9,7 @@ from src.keyboards.factories import (
     NavigationCallback, LanguageCallback
 )
 from typing import Optional
+from src.utils.formatters import format_status, truncate_service_name, format_date
 
 
 def get_subscriptions_list_keyboard(
@@ -23,17 +24,8 @@ def get_subscriptions_list_keyboard(
     # Кнопки подписок
     for sub in subscriptions:
         service_name = sub.get("service_name", "Unknown")
-        truncated_name = service_name[:10] + "…" if len(service_name) > 10 else service_name
-        status = sub.get("status", "unknown")
-        
-        # Определяем текст кнопки
-        if status == "active":
-            status_text = translations.get("status.active", language)
-        elif status == "expired":
-            status_text = translations.get("status.expired", language)
-        else:
-            status_text = status
-        
+        truncated_name = truncate_service_name(service_name)
+        status_text = format_status(sub.get("status", "unknown"), language)
         button_text = f"{truncated_name} | {status_text}"
         
         keyboard.append([
@@ -227,7 +219,7 @@ def get_payment_failed_keyboard(
         [
             InlineKeyboardButton(
                 text=translations.get("payment.change_method", language),
-                callback_data=RenewCallback(subscription_id=subscription_id).pack()
+                callback_data=PaymentCallback(action="change_method", payment_id=str(subscription_id)).pack()
             )
         ],
         [
@@ -260,21 +252,8 @@ def get_payments_history_keyboard(
         currency = payment.get("currency", "")
         provider = payment.get("provider", "")
         status = payment.get("status", "")
-        
-        # Форматируем дату
-        try:
-            from datetime import datetime
-            dt = datetime.fromisoformat(date.replace('Z', '+00:00'))
-            if language == "ru":
-                formatted_date = dt.strftime("%d.%m.%Y %H:%M")
-            else:
-                formatted_date = dt.strftime("%Y-%m-%d %H:%M")
-        except:
-            formatted_date = date
-        
-        # Форматируем статус
-        status_text = translations.get(f"status.{status}", language)
-        
+        formatted_date = format_date(date, language)
+        status_text = format_status(status, language)
         button_text = f"{formatted_date} — {amount}{currency} — {provider} — {status_text}"
         
         keyboard.append([

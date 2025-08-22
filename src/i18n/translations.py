@@ -103,6 +103,7 @@ class Translations:
             "error.service_unavailable": "Сервис недоступен, попробуйте позже",
             "error.network_error": "Ошибка сети, попробуйте позже",
             "error.retry": "Повторить",
+            "error.too_many_requests": "Слишком много запросов. Попробуйте позже",
             
             # Админ
             "admin.broadcast.title": "Рассылка",
@@ -117,6 +118,7 @@ class Translations:
             "admin.broadcast.confirm.no": "Нет",
             "admin.broadcast.sending": "Отправка рассылки...",
             "admin.broadcast.complete": "Рассылка завершена\nДоставлено: {delivered}\nОшибки: {failed}\nПропущено: {skipped}",
+            "admin.extend.select_plan": "Выберите план:",
             
             "admin.stats.title": "Статистика",
             "admin.stats.users_total": "Всего пользователей: {total}",
@@ -229,6 +231,7 @@ class Translations:
             "error.service_unavailable": "Service unavailable, try later",
             "error.network_error": "Network error, try later",
             "error.retry": "Retry",
+            "error.too_many_requests": "Too many requests. Please try again later",
             
             # Admin
             "admin.broadcast.title": "Broadcast",
@@ -243,6 +246,7 @@ class Translations:
             "admin.broadcast.confirm.no": "No",
             "admin.broadcast.sending": "Sending broadcast...",
             "admin.broadcast.complete": "Broadcast completed\nDelivered: {delivered}\nFailed: {failed}\nSkipped: {skipped}",
+            "admin.extend.select_plan": "Select plan:",
             
             "admin.stats.title": "Statistics",
             "admin.stats.users_total": "Total users: {total}",

@@ -14,6 +14,8 @@ class BackendAPIClient:
         self.base_url = config.backend_api_base_url.rstrip('/')
         self.token = config.backend_api_token
         self.timeout = httpx.Timeout(connect=2.0, read=5.0, write=5.0, pool=10.0)
+        # Реиспользуем один AsyncClient для всех запросов
+        self.client = httpx.AsyncClient(timeout=self.timeout)
         
         # Заголовки по умолчанию
         self.default_headers = {
@@ -36,51 +38,57 @@ class BackendAPIClient:
         if idempotency_key and config.idempotency_enabled:
             headers["X-Idempotency-Key"] = idempotency_key
         
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                # Простая политика ретраев для GET: до 2 повторов
-                attempts = 0
-                backoffs = [0.2, 0.6]
-                while True:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        json=data,
-                        params=params,
-                        headers=headers
-                    )
-                    if response.status_code == 429 and method.upper() == "GET":
-                        retry_after = response.headers.get("Retry-After")
-                        if retry_after is not None:
-                            await asyncio.sleep(float(retry_after))
-                        elif attempts < len(backoffs):
-                            await asyncio.sleep(backoffs[attempts])
-                        else:
-                            break
-                        attempts += 1
-                        continue
-                    break
-                
-                response.raise_for_status()
-                
-                if response.status_code == 204:  # No Content
-                    return {}
-                
-                return response.json()
-                
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 400:
-                    raise ValueError(f"Bad request: {e.response.text}")
-                elif e.response.status_code == 401:
-                    raise ValueError("Unauthorized")
-                elif e.response.status_code == 404:
-                    raise ValueError("Not found")
-                elif e.response.status_code == 429:
-                    raise ValueError("Rate limit exceeded")
-                else:
-                    raise ValueError(f"HTTP error {e.response.status_code}: {e.response.text}")
-            except httpx.RequestError as e:
-                raise ValueError(f"Network error: {str(e)}")
+        try:
+            # Простая политика ретраев для GET: до 2 повторов
+            attempts = 0
+            backoffs = [0.2, 0.6]
+            while True:
+                response = await self.client.request(
+                    method=method,
+                    url=url,
+                    json=data,
+                    params=params,
+                    headers=headers
+                )
+                if response.status_code == 429 and method.upper() == "GET":
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after is not None:
+                        await asyncio.sleep(float(retry_after))
+                    elif attempts < len(backoffs):
+                        await asyncio.sleep(backoffs[attempts])
+                    else:
+                        break
+                    attempts += 1
+                    continue
+                break
+            
+            response.raise_for_status()
+            
+            if response.status_code == 204:  # No Content
+                return {}
+            
+            return response.json()
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400:
+                raise ValueError(f"Bad request: {e.response.text}")
+            elif e.response.status_code == 401:
+                raise ValueError("Unauthorized")
+            elif e.response.status_code == 404:
+                raise ValueError("Not found")
+            elif e.response.status_code == 429:
+                raise ValueError("Rate limit exceeded")
+            else:
+                raise ValueError(f"HTTP error {e.response.status_code}: {e.response.text}")
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error: {str(e)}")
+
+    async def aclose(self) -> None:
+        """Закрыть HTTP клиент"""
+        try:
+            await self.client.aclose()
+        except Exception:
+            pass
     
     # Пользователи
     async def get_user(self, tg_id: int) -> Dict[str, Any]:

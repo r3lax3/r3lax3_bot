@@ -80,3 +80,4 @@ async def test_internal_notify_paid(monkeypatch):
         await client.close()
         await server.close()
         config.bot_internal_webhook_token = old_token
+

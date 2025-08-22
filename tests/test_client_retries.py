@@ -31,3 +31,4 @@ async def test_get_retries(monkeypatch):
         assert "ok" in res
     finally:
         httpx.AsyncClient = orig_async_client
+

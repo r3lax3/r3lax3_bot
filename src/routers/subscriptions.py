@@ -2,7 +2,7 @@
 Роутер подписок: список, деталь, продление (вход)
 """
 import logging
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from aiogram.types import Message, CallbackQuery
@@ -22,12 +22,11 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTIONS_LIST))
-async def subscriptions_pagination(callback: CallbackQuery, state: FSMContext, language: str):
+@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTIONS_LIST), SubscriptionCallback.filter(F.action == "list"))
+async def subscriptions_pagination(callback: CallbackQuery, state: FSMContext, language: str, callback_data: SubscriptionCallback):
     """Пагинация списка подписок"""
     try:
-        data = SubscriptionCallback.unpack(callback.data)
-        page = max(1, data.page or 1)
+        page = max(1, callback_data.page or 1)
         
         subs_data = await api_client.get_user_subscriptions(callback.from_user.id, page=page)
         items = subs_data.get("items", [])
@@ -47,16 +46,12 @@ async def subscriptions_pagination(callback: CallbackQuery, state: FSMContext, l
         await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
 
 
-@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTIONS_LIST))
-@router.callback_query(StateFilter(UserSG.STATE_IDLE))
-async def open_subscription_detail(callback: CallbackQuery, state: FSMContext, language: str):
+@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTIONS_LIST), SubscriptionCallback.filter(F.action == "detail"))
+@router.callback_query(StateFilter(UserSG.STATE_IDLE), SubscriptionCallback.filter(F.action == "detail"))
+async def open_subscription_detail(callback: CallbackQuery, state: FSMContext, language: str, callback_data: SubscriptionCallback):
     """Открыть деталь подписки"""
     try:
-        data = SubscriptionCallback.unpack(callback.data)
-        if data.action != "detail":
-            return
-        
-        sub = await api_client.get_subscription(data.subscription_id)
+        sub = await api_client.get_subscription(callback_data.subscription_id)
         service_name = sub.get("service_name", "")
         until_date = sub.get("until_date")
         status = sub.get("status")
@@ -67,7 +62,7 @@ async def open_subscription_detail(callback: CallbackQuery, state: FSMContext, l
         else:
             text = translations.get("subscriptions.detail.expired", language, service_name=service_name)
         
-        keyboard = get_subscription_detail_keyboard(data.subscription_id, language)
+        keyboard = get_subscription_detail_keyboard(callback_data.subscription_id, language)
         
         await callback.message.edit_text(text, reply_markup=keyboard)
         await state.set_state(UserSG.STATE_SUBSCRIPTION_DETAIL)
@@ -77,22 +72,11 @@ async def open_subscription_detail(callback: CallbackQuery, state: FSMContext, l
         await callback.answer(translations.get("error.service_unavailable", language), show_alert=True)
 
 
-@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTION_DETAIL))
-async def start_renew_flow(callback: CallbackQuery, state: FSMContext, language: str):
+@router.callback_query(StateFilter(UserSG.STATE_SUBSCRIPTION_DETAIL), RenewCallback.filter())
+async def start_renew_flow(callback: CallbackQuery, state: FSMContext, language: str, callback_data: RenewCallback):
     """Начать продление: загрузить способы оплаты и планы"""
     try:
-        # Поддерживаем как renew, так и select из списка
-        if callback.data.startswith(RenewCallback(prefix="renew", subscription_id=0).pack()[:5]):
-            data = RenewCallback.unpack(callback.data)
-            subscription_id = data.subscription_id
-        else:
-            # Может прийти из detail
-            try:
-                data = RenewCallback.unpack(callback.data)
-                subscription_id = data.subscription_id
-            except Exception:
-                return
-        
+        subscription_id = callback_data.subscription_id
         sub = await api_client.get_subscription(subscription_id)
         service_id = sub.get("service_id")
         options = await api_client.get_service_payment_options(service_id)
